@@ -12,15 +12,16 @@
 #include "verticies.hpp"
 
 #define ARRAY_SIZE 100
+#define RAND_CHANCE 3
 
 bool running = true;
 
 Vector3f position;
 Vector3f lookingAt;
 
-int rules[2][2] = {
-	{ 4, 7 }, // Alive between
-	{ 10, 4 } // Dead between
+const int rules[2][2] = {
+	{ 5, 7 }, // Alive between
+	{ 6, 6 }  // Dead between
 };
 
 sf::Mutex CGoLMutex;
@@ -437,7 +438,7 @@ void arrayUpdateThread()
 		for (int y = 0; y < ARRAY_SIZE; y++)
 			for (int z = 0; z < ARRAY_SIZE; z++)
 			{
-				if (rand() % 4 == 0)
+				if (rand() % RAND_CHANCE == 0)
 					CGoLArray[x][y][z] = 1;
 				else
 					CGoLArray[x][y][z] = 0;
@@ -582,7 +583,7 @@ int main()
 				for (int y = 0; y < ARRAY_SIZE; y++)
 					for (int z = 0; z < ARRAY_SIZE; z++)
 					{
-						if (rand() % 4 == 0)
+						if (rand() % RAND_CHANCE == 0)
 							CGoLArray[x][y][z] = 1;
 						else
 							CGoLArray[x][y][z] = 0;
