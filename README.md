@@ -5,10 +5,12 @@ This was built in C++ using SFMLM and OpenGL.
 ## Rules
 
 The rules can be modified on line 21 on /src/Main.cpp. The numbers are inclusive.
-`int rules[2][2] = {
+```cpp
+int rules[2][2] = {
 	{ *Lower bound*, *Upper bound* }, // Alive between
 	{ *Lower bound*, *Upper bound* } // Dead between
-};`
+};
+```
 
 Default rules are `4` `7` `10` `4`
 
