@@ -1,6 +1,6 @@
 # Conway's Game of Life in 3D
 
-This was built in C++ using SFMLM and OpenGL.
+This was built in C++ using SFML and OpenGL.
 
 ## Rules
 
