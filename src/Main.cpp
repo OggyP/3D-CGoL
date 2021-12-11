@@ -289,8 +289,6 @@ void renderingThread(sf::Window* window)
 		}
 		CGoLMutex.unlock();
 
-		// std::cout << drawSize << " size\n";
-
 		glDrawArrays(GL_TRIANGLES, 0, drawSize);
 
 		if (showCursor)
@@ -514,6 +512,25 @@ std::vector<GLfloat> getVerticies(float x, float y, float z, float brightness)
 	return verticies;
 }
 
+void updateVerticies();
+void updateVerticies()
+{
+	std::vector<GLfloat> newVerticies;
+	for (int x = 0; x < ARRAY_SIZE; x++)
+		for (int y = 0; y < ARRAY_SIZE; y++)
+			for (int z = 0; z < ARRAY_SIZE; z++)
+				if (CGoLArray[x][y][z])
+				{
+					std::vector<GLfloat> cube = getVerticies(x, y, z, 1.0f);
+					newVerticies.insert(newVerticies.end(), cube.begin(), cube.end());
+				}
+
+	CGoLMutex.lock();
+	verticiesUpdate = true;
+	verticies = newVerticies;
+	CGoLMutex.unlock();
+}
+
 void arrayUpdateThread();
 void arrayUpdateThread()
 {
@@ -527,7 +544,7 @@ void arrayUpdateThread()
 				else
 					CGoLArray[x][y][z] = 0;
 			}
-	bool firstRun = true;
+	updateVerticies();
 	while (running)
 	{
 
@@ -535,13 +552,19 @@ void arrayUpdateThread()
 		editMutex.lock();
 		for (auto const& updateBlock : edits)
 		{
-			std::cout << updateBlock.second << "\n";
 			CGoLArray[updateBlock.first[0]][updateBlock.first[1]][updateBlock.first[2]] = updateBlock.second;
-			CGoLMutex.lock();
-			std::vector<GLfloat> cube = getVerticies(updateBlock.first[0], updateBlock.first[1], updateBlock.first[2], 1.0f);
-			verticies.insert(verticies.end(), cube.begin(), cube.end());
-			verticiesUpdate = true;
-			CGoLMutex.unlock();
+			if (updateBlock.second)
+			{
+				CGoLMutex.lock();
+				std::vector<GLfloat> cube = getVerticies(updateBlock.first[0], updateBlock.first[1], updateBlock.first[2], 1.0f);
+				verticies.insert(verticies.end(), cube.begin(), cube.end());
+				verticiesUpdate = true;
+				CGoLMutex.unlock();
+			}
+			else
+			{
+				updateVerticies();
+			}
 		}
 		edits.clear();
 		editMutex.unlock();
@@ -562,7 +585,7 @@ void arrayUpdateThread()
 			CGoLMutex.unlock();
 			CGoLMutex.unlock();
 		}
-		if (!paused || firstRun)
+		if (!paused)
 		{
 			bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE];
 			std::vector<GLfloat> newVerticies;
@@ -617,7 +640,6 @@ void arrayUpdateThread()
 			verticies = newVerticies;
 			memcpy(CGoLArray, newCGOLArray, sizeof(CGoLArray));
 			CGoLMutex.unlock();
-			firstRun = false;
 		}
 		else
 		{
@@ -711,6 +733,8 @@ int main()
 							CGoLArray[x][y][z] = 0;
 					}
 			CGoLMutex.unlock();
+			if (paused)
+				updateVerticies();
 		}
 
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::P))
@@ -735,6 +759,7 @@ int main()
 
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::C))
 		{
+			paused = true;
 			clearBoard = true;
 		}
 
@@ -804,6 +829,7 @@ int main()
 
 		if (sf::Mouse::isButtonPressed(sf::Mouse::Left) || sf::Mouse::isButtonPressed(sf::Mouse::Right))
 		{
+			paused = true;
 			std::array<int, 3> currentBlock = { (int)floor(lookingAtBlock[0]), (int)floor(lookingAtBlock[1]), (int)floor(lookingAtBlock[2]) };
 			bool vaildPosition = true;
 			for (int i = 0; i < 3; i++)
