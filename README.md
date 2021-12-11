@@ -2,6 +2,24 @@
 
 This was built in C++ using SFML and OpenGL.
 
+## Controls
+
+> `w` `a` `s` `d` for movement
+
+> `Lshift` and `space` to move up and down
+
+> Move the mouse to look around
+
+> `Left Click` to place a cell
+
+> `Right Click` to remove a cell
+
+> Hold down `Middle Click` to move six times slower
+
+> `p` to toggle pause
+
+> `c` to toggle showing the cursor
+
 ## Rules
 
 The rules can be modified on line 21 on /src/Main.cpp. The numbers are inclusive.

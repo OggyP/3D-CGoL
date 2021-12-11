@@ -56,3 +56,11 @@ void specifyScreenVertexAttributes(GLuint shaderProgram)
 	glEnableVertexAttribArray(texAttrib);
 	glVertexAttribPointer(texAttrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
 }
+
+void specifyOutlineVertexAttributes(GLuint shaderProgram);
+void specifyOutlineVertexAttributes(GLuint shaderProgram)
+{
+	GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
+	glEnableVertexAttribArray(posAttrib);
+	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), 0);
+}

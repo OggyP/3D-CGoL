@@ -29,6 +29,14 @@ bool verticiesUpdate = false;
 bool CGoLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE] = { 0 };
 std::vector<GLfloat> verticies;
 
+int lookingAtBlock[3] = { 0 };
+
+bool paused = true;
+bool showCursor = true;
+
+sf::Mutex editMutex;
+std::vector<std::pair<std::array<int, 3>, bool>> edits; // second is true add else delete
+
 // CGoL
 const GLchar* CGOLVertexSource = R"glsl(
     #version 150 core
@@ -59,6 +67,36 @@ const GLchar* CGOLFragmentSource = R"glsl(
 	void main()
 	{
 		outColor = vec4(Brightness, Brightness, Brightness, 1.0);
+	}
+)glsl";
+
+// Cube Looking At Block
+const GLchar* blockOutlineVertexSource = R"glsl(
+    #version 150 core
+
+    in vec3 position;
+
+	uniform vec3 drawPos;
+
+	uniform mat4 model;
+	uniform mat4 view;
+	uniform mat4 proj;
+
+    void main()
+    {
+		vec4 newPos = vec4(position + drawPos, 1.0);
+        gl_Position =  proj * view * model * newPos;
+    }
+)glsl";
+
+const GLchar* blockOutlineFragmentSource = R"glsl(
+	#version 150 core
+
+	out vec4 outColor;
+
+	void main()
+	{
+		outColor = vec4(1.0, 0.0, 0.0, 1.0);
 	}
 )glsl";
 
@@ -100,13 +138,15 @@ void renderingThread(sf::Window* window)
 	glewInit();
 
 	// VAO
-	GLuint vaoQuad, vaoBoard;
+	GLuint vaoQuad, vaoCube, vaoBoard;
 	glGenVertexArrays(1, &vaoQuad);
+	glGenVertexArrays(1, &vaoCube);
 	glGenVertexArrays(1, &vaoBoard);
 
 	// VBO
-	GLuint vboQuad, vboBoard;
+	GLuint vboQuad, vboCube, vboBoard;
 	glGenBuffers(1, &vboBoard);
+	glGenBuffers(1, &vboCube);
 	glGenBuffers(1, &vboQuad);
 
 	// Bind Verticies
@@ -122,6 +162,16 @@ void renderingThread(sf::Window* window)
 	glBindVertexArray(vaoQuad);
 	glBindBuffer(GL_ARRAY_BUFFER, vboQuad);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+
+	glBindVertexArray(vaoCube);
+	glBindBuffer(GL_ARRAY_BUFFER, vboCube);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
+
+	// Create Cube Shader Program
+	GLuint CubeVertexShader, CubeFragmentShader, cubeShaderProgram;
+	createShaderProgram(blockOutlineVertexSource, blockOutlineFragmentSource, CubeVertexShader, CubeFragmentShader, cubeShaderProgram);
+
+	specifyOutlineVertexAttributes(cubeShaderProgram);
 
 	// Create CGoL Shader Program
 	GLuint CGOLVertexShader, CGOLFragmentShader, CGOLShaderProgram;
@@ -167,18 +217,31 @@ void renderingThread(sf::Window* window)
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//==================================================================================================================
 
+	glm::mat4 proj = glm::perspective(glm::radians(90.0f), (float)screenSize[0] / screenSize[1], 0.001f, 5600.0f);
+	glm::mat4 model = glm::mat4(0.1f);
+
+	glUseProgram(cubeShaderProgram);
+
+	GLint uniDrawPos = glGetUniformLocation(cubeShaderProgram, "drawPos");
+
+	GLint uniViewCube = glGetUniformLocation(cubeShaderProgram, "view");
+
+	GLint uniProjCube = glGetUniformLocation(cubeShaderProgram, "proj");
+	glUniformMatrix4fv(uniProjCube, 1, GL_FALSE, glm::value_ptr(proj));
+
+	GLint uniModelCube = glGetUniformLocation(cubeShaderProgram, "model");
+	glUniformMatrix4fv(uniModelCube, 1, GL_FALSE, glm::value_ptr(model));
+
 	// Use CGOL Shader and setup uniforms
 	glUseProgram(CGOLShaderProgram);
 
-	GLint uniView = glGetUniformLocation(CGOLShaderProgram, "view");
+	GLint uniViewCGoL = glGetUniformLocation(CGOLShaderProgram, "view");
 
-	glm::mat4 proj = glm::perspective(glm::radians(90.0f), (float)screenSize[0] / screenSize[1], 0.001f, 5600.0f);
-	GLint uniProj = glGetUniformLocation(CGOLShaderProgram, "proj");
-	glUniformMatrix4fv(uniProj, 1, GL_FALSE, glm::value_ptr(proj));
+	GLint uniProjCGoL = glGetUniformLocation(CGOLShaderProgram, "proj");
+	glUniformMatrix4fv(uniProjCGoL, 1, GL_FALSE, glm::value_ptr(proj));
 
-	GLint uniModel = glGetUniformLocation(CGOLShaderProgram, "model");
-	glm::mat4 model = glm::mat4(0.1f);
-	glUniformMatrix4fv(uniModel, 1, GL_FALSE, glm::value_ptr(model));
+	GLint uniModelCGoL = glGetUniformLocation(CGOLShaderProgram, "model");
+	glUniformMatrix4fv(uniModelCGoL, 1, GL_FALSE, glm::value_ptr(model));
 
 	// enable depth testing (2D)
 	glEnable(GL_DEPTH_TEST);
@@ -213,7 +276,8 @@ void renderingThread(sf::Window* window)
 			glm::vec3(position.x, position.y, position.z),
 			glm::vec3(lookingAt.x + position.x, lookingAt.y + position.y, lookingAt.z + position.z),
 			glm::vec3(0.0f, 0.0f, 1.0f));
-		glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
+
+		glUniformMatrix4fv(uniViewCGoL, 1, GL_FALSE, glm::value_ptr(view));
 
 		CGoLMutex.lock();
 		if (verticiesUpdate)
@@ -228,13 +292,32 @@ void renderingThread(sf::Window* window)
 
 		glDrawArrays(GL_TRIANGLES, 0, drawSize);
 
+		if (showCursor)
+		{
+			bool vaildPosition = true;
+			for (int i = 0; i < 3; i++)
+				if (lookingAtBlock[i] >= ARRAY_SIZE || lookingAtBlock[i] < 0)
+					vaildPosition = false;
+			if (vaildPosition)
+			{
+				glUseProgram(cubeShaderProgram);
+				glBindVertexArray(vaoCube);
+				glBindBuffer(GL_ARRAY_BUFFER, vboCube);
+
+				glUniform3f(uniDrawPos, lookingAtBlock[0], lookingAtBlock[1], lookingAtBlock[2]);
+				glUniformMatrix4fv(uniViewCube, 1, GL_FALSE, glm::value_ptr(view));
+
+				glDrawArrays(GL_LINES, 0, 24);
+			}
+		}
+
+		glDisable(GL_DEPTH_TEST);
+
 		// =============================================================
 
 		glUseProgram(screenShaderProgram);
 		// Bind to actual screen (frame buffer 0)
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-		glDisable(GL_DEPTH_TEST);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, texColorBuffer);
@@ -443,66 +526,89 @@ void arrayUpdateThread()
 				else
 					CGoLArray[x][y][z] = 0;
 			}
+	bool firstRun = true;
 	while (running)
 	{
+
 		// sf::sleep(sf::milliseconds(200));
-		bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE];
-		std::vector<GLfloat> newVerticies;
-		for (int x = 0; x < ARRAY_SIZE; x++)
-			for (int y = 0; y < ARRAY_SIZE; y++)
-				for (int z = 0; z < ARRAY_SIZE; z++)
-				{
-					// std::cout << "X " << x << " | Y " << y << " | Z " << z << "\n";
-					int neighbours = 0;
-					for (int xOffset = -1; xOffset < 2; xOffset++)
-						for (int yOffset = -1; yOffset < 2; yOffset++)
-							for (int zOffset = -1; zOffset < 2; zOffset++)
-								if (xOffset != 0 || yOffset != 0 || zOffset != 0)
-								{
-									if (pointIsAlive(x + xOffset, y + yOffset, z + zOffset))
-										neighbours++;
-								}
-					// if (neighbours > 0)
-					// {
-					// 	std::cout << "Almost ALive " << neighbours << "\n";
-					// }
-					if (neighbours > 0)
+		editMutex.lock();
+		for (auto const& updateBlock : edits)
+		{
+			std::cout << updateBlock.second << "\n";
+			CGoLArray[updateBlock.first[0]][updateBlock.first[1]][updateBlock.first[2]] = updateBlock.second;
+			CGoLMutex.lock();
+			std::vector<GLfloat> cube = getVerticies(updateBlock.first[0], updateBlock.first[1], updateBlock.first[2], 1.0f);
+			verticies.insert(verticies.end(), cube.begin(), cube.end());
+			verticiesUpdate = true;
+			CGoLMutex.unlock();
+		}
+		edits.clear();
+		editMutex.unlock();
+		if (!paused || firstRun)
+		{
+			bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE];
+			std::vector<GLfloat> newVerticies;
+			for (int x = 0; x < ARRAY_SIZE; x++)
+				for (int y = 0; y < ARRAY_SIZE; y++)
+					for (int z = 0; z < ARRAY_SIZE; z++)
 					{
-						if (CGoLArray[x][y][z])
+						// std::cout << "X " << x << " | Y " << y << " | Z " << z << "\n";
+						int neighbours = 0;
+						for (int xOffset = -1; xOffset < 2; xOffset++)
+							for (int yOffset = -1; yOffset < 2; yOffset++)
+								for (int zOffset = -1; zOffset < 2; zOffset++)
+									if (xOffset != 0 || yOffset != 0 || zOffset != 0)
+									{
+										if (pointIsAlive(x + xOffset, y + yOffset, z + zOffset))
+											neighbours++;
+									}
+						// if (neighbours > 0)
+						// {
+						// 	std::cout << "Almost ALive " << neighbours << "\n";
+						// }
+						if (neighbours > 0)
 						{
-							if (neighbours >= rules[0][0] && neighbours <= rules[0][1])
+							if (CGoLArray[x][y][z])
 							{
-								// Alive
-								newCGOLArray[x][y][z] = 1;
-								std::vector<GLfloat> cube = getVerticies(x, y, z, 1.0f);
-								newVerticies.insert(newVerticies.end(), cube.begin(), cube.end());
+								if (neighbours >= rules[0][0] && neighbours <= rules[0][1])
+								{
+									// Alive
+									newCGOLArray[x][y][z] = 1;
+									std::vector<GLfloat> cube = getVerticies(x, y, z, 1.0f);
+									newVerticies.insert(newVerticies.end(), cube.begin(), cube.end());
+								}
+								else
+									newCGOLArray[x][y][z] = 0;
 							}
 							else
-								newCGOLArray[x][y][z] = 0;
-						}
-						else
-						{
-							if (neighbours >= rules[1][0] && neighbours <= rules[1][1])
 							{
-								// Alive
-								newCGOLArray[x][y][z] = 1;
-								std::vector<GLfloat> cube = getVerticies(x, y, z, 1.0f);
-								newVerticies.insert(newVerticies.end(), cube.begin(), cube.end());
+								if (neighbours >= rules[1][0] && neighbours <= rules[1][1])
+								{
+									// Alive
+									newCGOLArray[x][y][z] = 1;
+									std::vector<GLfloat> cube = getVerticies(x, y, z, 1.0f);
+									newVerticies.insert(newVerticies.end(), cube.begin(), cube.end());
+								}
+								else
+									newCGOLArray[x][y][z] = 0;
 							}
-							else
-								newCGOLArray[x][y][z] = 0;
 						}
 					}
-				}
-		CGoLMutex.lock();
-		verticiesUpdate = true;
-		verticies = newVerticies;
-		// for (int x = 0; x < ARRAY_SIZE; x++)
-		// 	for (int y = 0; y < ARRAY_SIZE; y++)
-		// 		for (int z = 0; z < ARRAY_SIZE; z++)
-		// 			CGoLArray[x][y][z] = newCGOLArray[x][y][z];
-		memcpy(CGoLArray, newCGOLArray, sizeof(CGoLArray));
-		CGoLMutex.unlock();
+			CGoLMutex.lock();
+			verticiesUpdate = true;
+			verticies = newVerticies;
+			// for (int x = 0; x < ARRAY_SIZE; x++)
+			// 	for (int y = 0; y < ARRAY_SIZE; y++)
+			// 		for (int z = 0; z < ARRAY_SIZE; z++)
+			// 			CGoLArray[x][y][z] = newCGOLArray[x][y][z];
+			memcpy(CGoLArray, newCGOLArray, sizeof(CGoLArray));
+			CGoLMutex.unlock();
+			firstRun = false;
+		}
+		else
+		{
+			sf::sleep(sf::microseconds(5));
+		}
 	}
 }
 
@@ -564,6 +670,8 @@ int main()
 			}
 		}
 
+		float toMoveSpeed = (sf::Mouse::isButtonPressed(sf::Mouse::Middle)) ? movementSpeed / 6 : movementSpeed;
+
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Escape))
 		{
 			window.close();
@@ -572,7 +680,7 @@ int main()
 
 		sf::Time dt = deltaClock.restart();
 
-		float deltaTimeMovementSpeed = movementSpeed * (float)dt.asMicroseconds() / 10000.0f;
+		float deltaTimeMovementSpeed = toMoveSpeed * (float)dt.asMicroseconds() / 10000.0f;
 
 		lookingAt.updateDirection();
 
@@ -589,6 +697,26 @@ int main()
 							CGoLArray[x][y][z] = 0;
 					}
 			CGoLMutex.unlock();
+		}
+
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::P))
+		{
+			paused = !paused;
+			while (sf::Keyboard::isKeyPressed(sf::Keyboard::P))
+			{
+				sf::sleep(sf::microseconds(5));
+				deltaClock.restart();
+			}
+		}
+
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::C))
+		{
+			showCursor = !showCursor;
+			while (sf::Keyboard::isKeyPressed(sf::Keyboard::C))
+			{
+				sf::sleep(sf::microseconds(5));
+				deltaClock.restart();
+			}
 		}
 
 		mouseCoord = sf::Mouse::getPosition(window);
@@ -648,6 +776,33 @@ int main()
 		position.y += moveAmt.y;
 		position.z += moveAmt.z;
 		lookingAt.updateDirection();
+
+		lookingAt.normalise(5);
+
+		lookingAtBlock[0] = (int)floor(position.x + lookingAt.x + 0.5f);
+		lookingAtBlock[1] = (int)floor(position.y + lookingAt.y + 0.5f);
+		lookingAtBlock[2] = (int)floor(position.z + lookingAt.z + 0.5f);
+
+		if (sf::Mouse::isButtonPressed(sf::Mouse::Left) || sf::Mouse::isButtonPressed(sf::Mouse::Right))
+		{
+			std::array<int, 3> currentBlock = { (int)floor(lookingAtBlock[0]), (int)floor(lookingAtBlock[1]), (int)floor(lookingAtBlock[2]) };
+			bool vaildPosition = true;
+			for (int i = 0; i < 3; i++)
+				if (currentBlock[i] >= ARRAY_SIZE || currentBlock[i] < 0)
+					vaildPosition = false;
+			if (vaildPosition)
+			{
+				editMutex.lock();
+				edits.push_back(std::make_pair(currentBlock, sf::Mouse::isButtonPressed(sf::Mouse::Left)));
+				editMutex.unlock();
+			}
+			while (sf::Mouse::isButtonPressed(sf::Mouse::Left) || sf::Mouse::isButtonPressed(sf::Mouse::Right))
+			{
+				sf::sleep(sf::microseconds(2));
+				deltaClock.restart();
+			}
+		}
+
 		// sf::sleep(sf::microseconds(5));
 	}
 
