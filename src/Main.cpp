@@ -20,7 +20,7 @@ Vector3f position;
 Vector3f lookingAt;
 
 const int rules[2][2] = {
-	{ 5, 6 }, // Alive between
+	{ 4, 5 }, // Alive between
 	{ 5, 5 }  // Dead between
 };
 
