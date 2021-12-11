@@ -8,17 +8,19 @@ This was built in C++ using SFML and OpenGL.
 
 > `Lshift` and `space` to move up and down
 
+> Hold down `Middle Click` to move six times slower
+
 > Move the mouse to look around
 
 > `Left Click` to place a cell
 
 > `Right Click` to remove a cell
 
-> Hold down `Middle Click` to move six times slower
+> `c` to remove all cells
 
 > `p` to toggle pause
 
-> `c` to toggle showing the cursor
+> `l` to toggle showing the cursor
 
 ## Rules
 

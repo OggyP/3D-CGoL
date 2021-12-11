@@ -20,8 +20,8 @@ Vector3f position;
 Vector3f lookingAt;
 
 const int rules[2][2] = {
-	{ 5, 7 }, // Alive between
-	{ 6, 6 }  // Dead between
+	{ 5, 6 }, // Alive between
+	{ 5, 5 }  // Dead between
 };
 
 sf::Mutex CGoLMutex;
@@ -33,6 +33,7 @@ int lookingAtBlock[3] = { 0 };
 
 bool paused = true;
 bool showCursor = true;
+bool clearBoard = false;
 
 sf::Mutex editMutex;
 std::vector<std::pair<std::array<int, 3>, bool>> edits; // second is true add else delete
@@ -544,6 +545,23 @@ void arrayUpdateThread()
 		}
 		edits.clear();
 		editMutex.unlock();
+		if (clearBoard)
+		{
+			clearBoard = false;
+			bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE];
+			for (int x = 0; x < ARRAY_SIZE; x++)
+				for (int y = 0; y < ARRAY_SIZE; y++)
+					for (int z = 0; z < ARRAY_SIZE; z++)
+					{
+						newCGOLArray[x][y][z] = 0;
+					}
+			CGoLMutex.lock();
+			verticiesUpdate = true;
+			verticies.clear();
+			memcpy(CGoLArray, newCGOLArray, sizeof(CGoLArray));
+			CGoLMutex.unlock();
+			CGoLMutex.unlock();
+		}
 		if (!paused || firstRun)
 		{
 			bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE];
@@ -597,10 +615,6 @@ void arrayUpdateThread()
 			CGoLMutex.lock();
 			verticiesUpdate = true;
 			verticies = newVerticies;
-			// for (int x = 0; x < ARRAY_SIZE; x++)
-			// 	for (int y = 0; y < ARRAY_SIZE; y++)
-			// 		for (int z = 0; z < ARRAY_SIZE; z++)
-			// 			CGoLArray[x][y][z] = newCGOLArray[x][y][z];
 			memcpy(CGoLArray, newCGOLArray, sizeof(CGoLArray));
 			CGoLMutex.unlock();
 			firstRun = false;
@@ -709,14 +723,19 @@ int main()
 			}
 		}
 
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::C))
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::L))
 		{
 			showCursor = !showCursor;
-			while (sf::Keyboard::isKeyPressed(sf::Keyboard::C))
+			while (sf::Keyboard::isKeyPressed(sf::Keyboard::L))
 			{
 				sf::sleep(sf::microseconds(5));
 				deltaClock.restart();
 			}
+		}
+
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::C))
+		{
+			clearBoard = true;
 		}
 
 		mouseCoord = sf::Mouse::getPosition(window);
