@@ -515,19 +515,19 @@ std::vector<GLfloat> getVerticies(float x, float y, float z, float brightness)
 void updateVerticies();
 void updateVerticies()
 {
-	std::vector<GLfloat> newVerticies;
+	CGoLMutex.lock();
+	std::vector<GLfloat> updatedVerticies;
 	for (int x = 0; x < ARRAY_SIZE; x++)
 		for (int y = 0; y < ARRAY_SIZE; y++)
 			for (int z = 0; z < ARRAY_SIZE; z++)
 				if (CGoLArray[x][y][z])
 				{
 					std::vector<GLfloat> cube = getVerticies(x, y, z, 1.0f);
-					newVerticies.insert(newVerticies.end(), cube.begin(), cube.end());
+					updatedVerticies.insert(updatedVerticies.end(), cube.begin(), cube.end());
 				}
 
-	CGoLMutex.lock();
 	verticiesUpdate = true;
-	verticies = newVerticies;
+	verticies = updatedVerticies;
 	CGoLMutex.unlock();
 }
 
@@ -587,7 +587,7 @@ void arrayUpdateThread()
 		}
 		if (!paused)
 		{
-			bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE];
+			bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE] = { 0 };
 			std::vector<GLfloat> newVerticies;
 			for (int x = 0; x < ARRAY_SIZE; x++)
 				for (int y = 0; y < ARRAY_SIZE; y++)
