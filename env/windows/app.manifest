@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
 	<assemblyIdentity
-		name="SFML Boilerplate"
+		name="3D CGoL"
 		processorArchitecture="ia64"
 		version="1.0.0.0"
 		type="win32" />
-	<description>My SFML Game</description>
+	<description>3D Conway's Game of Life</description>
 	<trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
 		<security>
 			<requestedPrivileges>
