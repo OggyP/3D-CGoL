@@ -666,16 +666,17 @@ int main()
 	settings.attributeFlags = sf::ContextSettings::Core;
 
 #if defined(_DEBUG)
-	sf::Window window(sf::VideoMode(1000, 1000), "OpenGL 3D Conway's Game of Life DEBUGGING MODE", sf::Style::Resize | sf::Style::Close, settings);
+	sf::Window window(sf::VideoMode(1000, 1000), "3D Conway's Game of Life DEBUGGING MODE", sf::Style::Resize | sf::Style::Close, settings);
 #else
 	#if defined(__linux__)
-	sf::Window window(sf::VideoMode(1920, 1080), "OpenGL 3D Conway's Game of Life", sf::Style::Resize | sf::Style::Fullscreen | sf::Style::Close, settings);
+	sf::Window window(sf::VideoMode(1920, 1080), "3D Conway's Game of Life", sf::Style::Resize | sf::Style::Fullscreen | sf::Style::Close, settings);
 	#else
-	sf::Window window(sf::VideoMode(1000, 1000), "OpenGL 3D Conway's Game of Life", sf::Style::Resize | sf::Style::Close, settings);
+	sf::Window window(sf::VideoMode(screenSize[0], screenSize[1]), "3D Conway's Game of Life", sf::Style::Resize | sf::Style::Close, settings);
 	platform.toggleFullscreen(window.getSystemHandle(), sf::Style::Fullscreen, false, sf::Vector2u(sf::VideoMode::getDesktopMode().width, sf::VideoMode::getDesktopMode().height));
 	#endif
 #endif
 
+	window.setSize(window.getSize());
 	platform.setIcon(window.getSystemHandle());
 	window.setFramerateLimit(60);
 	window.setActive(false);
