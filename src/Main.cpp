@@ -14,6 +14,12 @@
 #define ARRAY_SIZE 100
 #define RAND_CHANCE 3
 
+#define CALC_THREAD_COUNT 4
+bool threadsCalced[CALC_THREAD_COUNT] = { 0 };
+bool start = false;
+sf::Mutex combinedMutex;
+std::vector<GLfloat> verticiesCombinedVerticies;
+
 bool running = true;
 
 Vector3f position;
@@ -26,6 +32,7 @@ const int rules[2][2] = {
 
 sf::Mutex CGoLMutex;
 bool verticiesUpdate = false;
+bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE] = { 0 };
 bool CGoLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE] = { 0 };
 std::vector<GLfloat> verticies;
 
@@ -531,8 +538,8 @@ void updateVerticies()
 	CGoLMutex.unlock();
 }
 
-void arrayUpdateThread();
-void arrayUpdateThread()
+void arrayUpdateThreadHandler();
+void arrayUpdateThreadHandler()
 {
 	srand(time(0));
 	for (int x = 0; x < ARRAY_SIZE; x++)
@@ -545,10 +552,10 @@ void arrayUpdateThread()
 					CGoLArray[x][y][z] = 0;
 			}
 	updateVerticies();
+	for (int i = 0; i < CALC_THREAD_COUNT; i++)
+		threadsCalced[i] = true;
 	while (running)
 	{
-
-		// sf::sleep(sf::milliseconds(200));
 		editMutex.lock();
 		for (auto const& updateBlock : edits)
 		{
@@ -571,7 +578,6 @@ void arrayUpdateThread()
 		if (clearBoard)
 		{
 			clearBoard = false;
-			bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE];
 			for (int x = 0; x < ARRAY_SIZE; x++)
 				for (int y = 0; y < ARRAY_SIZE; y++)
 					for (int z = 0; z < ARRAY_SIZE; z++)
@@ -587,9 +593,51 @@ void arrayUpdateThread()
 		}
 		if (!paused)
 		{
-			bool newCGOLArray[ARRAY_SIZE][ARRAY_SIZE][ARRAY_SIZE] = { 0 };
+			if (!start)
+			{
+				bool threadsDone = true;
+				for (int i = 0; i < CALC_THREAD_COUNT; i++)
+				{
+					if (!threadsCalced[i])
+						threadsDone = false;
+				}
+				if (threadsDone)
+				{
+					CGoLMutex.lock();
+					combinedMutex.lock();
+					verticiesUpdate = true;
+					verticies = verticiesCombinedVerticies;
+					memcpy(CGoLArray, newCGOLArray, sizeof(CGoLArray));
+					verticiesCombinedVerticies.clear();
+					combinedMutex.unlock();
+					CGoLMutex.unlock();
+					for (int x = 0; x < ARRAY_SIZE; x++)
+						for (int y = 0; y < ARRAY_SIZE; y++)
+							for (int z = 0; z < ARRAY_SIZE; z++)
+								newCGOLArray[x][y][z] = 0;
+					start = true;
+				}
+			}
+		}
+		sf::sleep(sf::microseconds(10));
+	}
+}
+
+void arrayUpdateThread(int threadNum);
+void arrayUpdateThread(int threadNum)
+{
+	const int startPoint = ARRAY_SIZE / CALC_THREAD_COUNT * threadNum;
+	const int endPoint = ARRAY_SIZE / CALC_THREAD_COUNT * (threadNum + 1);
+
+	while (running)
+	{
+
+		// sf::sleep(sf::milliseconds(200));
+		if (start)
+		{
+			threadsCalced[threadNum] = false;
 			std::vector<GLfloat> newVerticies;
-			for (int x = 0; x < ARRAY_SIZE; x++)
+			for (int x = startPoint; x < endPoint; x++)
 				for (int y = 0; y < ARRAY_SIZE; y++)
 					for (int z = 0; z < ARRAY_SIZE; z++)
 					{
@@ -603,10 +651,6 @@ void arrayUpdateThread()
 										if (pointIsAlive(x + xOffset, y + yOffset, z + zOffset))
 											neighbours++;
 									}
-						// if (neighbours > 0)
-						// {
-						// 	std::cout << "Almost ALive " << neighbours << "\n";
-						// }
 						if (neighbours > 0)
 						{
 							if (CGoLArray[x][y][z])
@@ -635,11 +679,12 @@ void arrayUpdateThread()
 							}
 						}
 					}
-			CGoLMutex.lock();
-			verticiesUpdate = true;
-			verticies = newVerticies;
-			memcpy(CGoLArray, newCGOLArray, sizeof(CGoLArray));
-			CGoLMutex.unlock();
+			start = false;
+			std::cout << "Done in a thread\n";
+			threadsCalced[threadNum] = true;
+			combinedMutex.lock();
+			verticiesCombinedVerticies.insert(verticiesCombinedVerticies.end(), newVerticies.begin(), newVerticies.end());
+			combinedMutex.unlock();
 		}
 		else
 		{
@@ -685,8 +730,20 @@ int main()
 	sf::Thread renderThread(&renderingThread, &window);
 	renderThread.launch();
 
-	sf::Thread arrayUpdatingThread(&arrayUpdateThread);
-	arrayUpdatingThread.launch();
+	sf::Thread arrayUpdatingThread0(&arrayUpdateThread, 0);
+	arrayUpdatingThread0.launch();
+
+	sf::Thread arrayUpdatingThread1(&arrayUpdateThread, 1);
+	arrayUpdatingThread1.launch();
+
+	sf::Thread arrayUpdatingThread2(&arrayUpdateThread, 0);
+	arrayUpdatingThread2.launch();
+
+	sf::Thread arrayUpdatingThread3(&arrayUpdateThread, 0);
+	arrayUpdatingThread3.launch();
+
+	sf::Thread syncThread(&arrayUpdateThreadHandler);
+	syncThread.launch();
 
 	sf::Event event;
 	sf::Clock deltaClock;
@@ -853,6 +910,10 @@ int main()
 	}
 
 	renderThread.wait();
-	arrayUpdatingThread.wait();
+	arrayUpdatingThread0.wait();
+	arrayUpdatingThread1.wait();
+	arrayUpdatingThread2.wait();
+	arrayUpdatingThread3.wait();
+	syncThread.wait();
 	return 0;
 }
