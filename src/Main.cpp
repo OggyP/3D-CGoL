@@ -671,7 +671,7 @@ int main()
 	#if defined(__linux__)
 	sf::Window window(sf::VideoMode(1680, 1050), "3D Conway's Game of Life", sf::Style::Resize | sf::Style::Fullscreen | sf::Style::Close, settings);
 	#else
-	sf::Window window(sf::VideoMode(1680, 1050), "3D Conway's Game of Life", sf::Style::Resize | sf::Style::Close, settings);
+	sf::Window window(sf::VideoMode(0, 0), "3D Conway's Game of Life", sf::Style::Resize | sf::Style::Close, settings);
 	platform.toggleFullscreen(window.getSystemHandle(), sf::Style::Fullscreen, false, sf::Vector2u(sf::VideoMode::getDesktopMode().width, sf::VideoMode::getDesktopMode().height));
 	#endif
 #endif
